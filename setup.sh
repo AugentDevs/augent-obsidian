@@ -3,10 +3,10 @@ set -eo pipefail
 
 # =============================================================================
 # obsidian-claude setup
-# Automated installer for obsidian-claude: Obsidian as a live editor for Claude
+# Make every .txt and .md file on your Mac open directly in Obsidian.
 # =============================================================================
 
-VERSION="1.0.0"
+VERSION="2.0.0"
 GITHUB_RAW="https://raw.githubusercontent.com/AugentDevs/obsidian-claude/main"
 
 # --- Colors ---
@@ -36,7 +36,7 @@ trap cleanup EXIT
 # =============================================================================
 # Phase 1: Detect environment
 # =============================================================================
-phase "1/8" "Detect environment"
+phase "1/6" "Detect environment"
 
 echo ""
 echo -e "${BOLD}  obsidian-claude setup${NC}  v${VERSION}"
@@ -113,7 +113,7 @@ fi
 # =============================================================================
 # Phase 2: Verify Obsidian plugins
 # =============================================================================
-phase "2/8" "Verify Obsidian plugins"
+phase "2/6" "Verify Obsidian plugins"
 
 OBSIDIAN_DIR="$VAULT_PATH/.obsidian"
 PLUGINS_OK=true
@@ -124,32 +124,38 @@ if [[ -f "$COMMUNITY_PLUGINS" ]]; then
     if python3 -c "
 import json, sys
 plugins = json.load(open('$COMMUNITY_PLUGINS'))
-missing = []
 if 'obsidian-custom-file-extensions-plugin' not in plugins:
-    missing.append('Custom File Extensions')
-if 'obsidian-local-rest-api' not in plugins:
-    missing.append('Local REST API')
-if missing:
-    print('Missing plugins: ' + ', '.join(missing))
+    print('Missing: Custom File Extensions')
     sys.exit(1)
 " 2>/dev/null; then
-        success "  Required plugins installed"
+        success "  Custom File Extensions plugin installed"
     else
         PLUGINS_OK=false
-        error "  Missing required Obsidian plugins."
-        echo "  Install these community plugins in Obsidian:"
-        echo "    1. Custom File Extensions Plugin"
-        echo "    2. Local REST API"
+        error "  Missing required plugin: Custom File Extensions by MeepTech"
+        echo "  Install it in Obsidian: Settings > Community plugins > Browse"
+    fi
+
+    # Check for Local REST API (recommended, not required)
+    if python3 -c "
+import json, sys
+plugins = json.load(open('$COMMUNITY_PLUGINS'))
+if 'obsidian-local-rest-api' not in plugins:
+    sys.exit(1)
+" 2>/dev/null; then
+        success "  Local REST API plugin installed (recommended)"
+    else
+        warn "  Local REST API not installed (optional, recommended for power users)"
+        echo "  Adds REST endpoints for searching, reading, and automating your vault."
+        echo "  Install: obsidian://show-plugin?id=obsidian-local-rest-api"
     fi
 else
     PLUGINS_OK=false
     error "  community-plugins.json not found."
     echo "  Enable community plugins in Obsidian and install:"
-    echo "    1. Custom File Extensions Plugin"
-    echo "    2. Local REST API"
+    echo "    - Custom File Extensions Plugin (required)"
 fi
 
-# app.json — showUnsupportedFiles
+# app.json -- showUnsupportedFiles
 APP_JSON="$OBSIDIAN_DIR/app.json"
 if [[ -f "$APP_JSON" ]]; then
     if python3 -c "
@@ -158,40 +164,15 @@ cfg = json.load(open('$APP_JSON'))
 if not cfg.get('showUnsupportedFiles', False):
     sys.exit(1)
 " 2>/dev/null; then
-        success "  showUnsupportedFiles enabled"
+        success "  Detect all file extensions enabled"
     else
         PLUGINS_OK=false
-        error "  showUnsupportedFiles is not enabled in Obsidian."
+        error "  'Detect all file extensions' is not enabled."
         echo "  Go to Obsidian Settings > Files & Links > Detect all file extensions"
     fi
 else
     PLUGINS_OK=false
     error "  app.json not found. Open Obsidian at least once, then enable 'Detect all file extensions'."
-fi
-
-# REST API responds
-if curl -s --insecure https://localhost:27124 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['status']=='OK'" 2>/dev/null; then
-    success "  Local REST API responding"
-else
-    PLUGINS_OK=false
-    error "  Local REST API not responding on https://localhost:27124"
-    echo "  Make sure Obsidian is running and the Local REST API plugin is enabled."
-fi
-
-# Read API key
-REST_API_DATA="$OBSIDIAN_DIR/plugins/obsidian-local-rest-api/data.json"
-if [[ -f "$REST_API_DATA" ]]; then
-    API_KEY=$(python3 -c "import json; print(json.load(open('$REST_API_DATA'))['apiKey'])" 2>/dev/null) || true
-    if [[ -n "$API_KEY" ]]; then
-        success "  API key read (${#API_KEY} chars)"
-    else
-        PLUGINS_OK=false
-        error "  Could not read API key from Local REST API data.json"
-    fi
-else
-    PLUGINS_OK=false
-    error "  Local REST API data.json not found at: $REST_API_DATA"
-    echo "  Enable the Local REST API plugin in Obsidian and restart."
 fi
 
 if [[ "$PLUGINS_OK" != "true" ]]; then
@@ -203,7 +184,7 @@ fi
 # =============================================================================
 # Phase 3: Install prerequisites
 # =============================================================================
-phase "3/8" "Install prerequisites"
+phase "3/6" "Install prerequisites"
 
 if command -v brew > /dev/null 2>&1; then
     success "  Homebrew found"
@@ -224,7 +205,7 @@ fi
 # =============================================================================
 # Phase 4: Build apps
 # =============================================================================
-phase "4/8" "Build apps"
+phase "4/6" "Build apps"
 
 BUILD_DIR=$(mktemp -d)
 
@@ -238,15 +219,13 @@ else
     warn "  Local source not found, downloading from GitHub..."
     DOWNLOAD_DIR=$(mktemp -d)
     SRC_DIR="$DOWNLOAD_DIR/src"
-    mkdir -p "$SRC_DIR/hooks"
+    mkdir -p "$SRC_DIR"
 
     FILES=(
         "src/OpenInObsidian.swift"
         "src/ObsidianFileWatcher.swift"
         "src/open-in-obsidian.plist"
         "src/file-watcher.plist"
-        "src/hooks/obsidian-post-edit.sh"
-        "src/hooks/obsidian-pre-edit.sh"
     )
 
     for f in "${FILES[@]}"; do
@@ -281,9 +260,9 @@ fi
 success "  obsidian-file-watcher compiled"
 
 # =============================================================================
-# Phase 5: Install apps
+# Phase 5: Install apps and register file handlers
 # =============================================================================
-phase "5/8" "Install apps"
+phase "5/6" "Install apps and register file handlers"
 
 # --- Open in Obsidian ---
 HANDLER_APP="/Applications/Open in Obsidian.app"
@@ -297,7 +276,6 @@ success "  Open in Obsidian.app installed"
 
 # Register with Launch Services
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister "$HANDLER_APP"
-success "  Launch Services updated"
 
 # --- Obsidian File Watcher ---
 WATCHER_APP="/Applications/Obsidian File Watcher.app"
@@ -309,11 +287,7 @@ codesign --force --deep --sign - "$WATCHER_APP"
 xattr -cr "$WATCHER_APP"
 success "  Obsidian File Watcher.app installed"
 
-# =============================================================================
-# Phase 6: Register file handlers
-# =============================================================================
-phase "6/8" "Register file handlers"
-
+# --- Register file handlers ---
 BUNDLE_ID="com.local.open-in-obsidian"
 duti -s "$BUNDLE_ID" public.plain-text all
 duti -s "$BUNDLE_ID" .txt all
@@ -323,72 +297,9 @@ duti -s "$BUNDLE_ID" .md all
 success "  File handlers registered for .txt and .md"
 
 # =============================================================================
-# Phase 7: Set up Claude Code hooks
+# Phase 6: Verify installation
 # =============================================================================
-phase "7/8" "Set up Claude Code hooks"
-
-HOOKS_DIR="$HOME/.claude/hooks"
-mkdir -p "$HOOKS_DIR"
-
-cp "$SRC_DIR/hooks/obsidian-pre-edit.sh" "$HOOKS_DIR/obsidian-pre-edit.sh"
-cp "$SRC_DIR/hooks/obsidian-post-edit.sh" "$HOOKS_DIR/obsidian-post-edit.sh"
-chmod +x "$HOOKS_DIR/obsidian-pre-edit.sh"
-chmod +x "$HOOKS_DIR/obsidian-post-edit.sh"
-success "  Hook scripts installed"
-
-# Merge hooks into settings.json
-python3 - "$HOME/.claude/settings.json" <<'PYEOF'
-import json, sys, os
-
-path = sys.argv[1]
-try:
-    with open(path) as f:
-        cfg = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
-    cfg = {}
-
-if "hooks" not in cfg:
-    cfg["hooks"] = {}
-if "PreToolUse" not in cfg["hooks"]:
-    cfg["hooks"]["PreToolUse"] = []
-if "PostToolUse" not in cfg["hooks"]:
-    cfg["hooks"]["PostToolUse"] = []
-
-# Add pre-edit hook if not already present
-pre_hook_path = os.path.expanduser("~/.claude/hooks/obsidian-pre-edit.sh")
-pre_exists = any(
-    any(h.get("command", "").endswith("obsidian-pre-edit.sh") for h in entry.get("hooks", []))
-    for entry in cfg["hooks"]["PreToolUse"]
-)
-if not pre_exists:
-    cfg["hooks"]["PreToolUse"].append({
-        "matcher": "Edit|Write",
-        "hooks": [{"type": "command", "command": pre_hook_path}]
-    })
-
-# Add post-edit hook if not already present
-post_hook_path = os.path.expanduser("~/.claude/hooks/obsidian-post-edit.sh")
-post_exists = any(
-    any(h.get("command", "").endswith("obsidian-post-edit.sh") for h in entry.get("hooks", []))
-    for entry in cfg["hooks"]["PostToolUse"]
-)
-if not post_exists:
-    cfg["hooks"]["PostToolUse"].append({
-        "matcher": "Edit|Write",
-        "hooks": [{"type": "command", "command": post_hook_path}]
-    })
-
-with open(path, "w") as f:
-    json.dump(cfg, f, indent=2)
-    f.write("\n")
-PYEOF
-
-success "  Claude Code settings.json updated"
-
-# =============================================================================
-# Phase 8: Verify installation
-# =============================================================================
-phase "8/8" "Verify installation"
+phase "6/6" "Verify installation"
 
 ERRORS=0
 
@@ -407,21 +318,6 @@ else
     ERRORS=$((ERRORS+1))
 fi
 
-# Check hooks
-if [[ -x "$HOOKS_DIR/obsidian-pre-edit.sh" ]]; then
-    success "  [ok] obsidian-pre-edit.sh"
-else
-    error "  [!!] obsidian-pre-edit.sh missing or not executable"
-    ERRORS=$((ERRORS+1))
-fi
-
-if [[ -x "$HOOKS_DIR/obsidian-post-edit.sh" ]]; then
-    success "  [ok] obsidian-post-edit.sh"
-else
-    error "  [!!] obsidian-post-edit.sh missing or not executable"
-    ERRORS=$((ERRORS+1))
-fi
-
 # Check duti registrations
 TXT_HANDLER=$(duti -x txt 2>/dev/null | head -1)
 if [[ "$TXT_HANDLER" == *"Open in Obsidian"* ]]; then
@@ -435,13 +331,6 @@ if [[ "$MD_HANDLER" == *"Open in Obsidian"* ]]; then
     success "  [ok] .md handler: $MD_HANDLER"
 else
     warn "  [--] .md handler: $MD_HANDLER (may need logout/login)"
-fi
-
-# Test REST API with key
-if curl -s --insecure -H "Authorization: Bearer $API_KEY" https://localhost:27124 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('authenticated', False)" 2>/dev/null; then
-    success "  [ok] REST API authenticated"
-else
-    warn "  [--] REST API auth check inconclusive (API may not return 'authenticated' field)"
 fi
 
 # Add File Watcher to login items
@@ -465,9 +354,7 @@ echo ""
 echo "  Vault:   $VAULT_PATH"
 echo "  Apps:    /Applications/Open in Obsidian.app"
 echo "           /Applications/Obsidian File Watcher.app"
-echo "  Hooks:   $HOOKS_DIR/obsidian-pre-edit.sh"
-echo "           $HOOKS_DIR/obsidian-post-edit.sh"
 echo ""
 if [[ $ERRORS -eq 0 ]]; then
-    success "  Restart Claude Code to activate hooks."
+    success "  Done. Double-click any .txt or .md file to open it in Obsidian."
 fi
