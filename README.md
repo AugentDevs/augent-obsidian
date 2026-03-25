@@ -90,10 +90,10 @@ The screenshot shows both plugins installed and enabled. Custom File Extensions 
   <img src="./images/plugins.png" width="700" alt="Community plugins: Custom File Extensions and Local REST API installed and enabled">
 </p>
 
-4. Go to Settings > **Files and links** > toggle **Detect all file extensions** ON.
+4. Go to Settings > **Files & Links** > toggle **Detect all file extensions** ON.
 
 <p align="center">
-  <img src="./images/file-extensions.png" width="700" alt="Files and links: Detect all file extensions toggled ON">
+  <img src="./images/file-extensions.png" width="700" alt="Files & Links: Detect all file extensions toggled ON">
 </p>
 
 5. Restart Obsidian (quit fully and reopen).
