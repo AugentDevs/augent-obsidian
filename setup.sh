@@ -97,9 +97,14 @@ VAULT_PATH="${VAULT_PATH%/}"
 if xcode-select -p > /dev/null 2>&1; then
     success "  Xcode Command Line Tools installed"
 else
-    error "  Xcode Command Line Tools not found."
-    error "  Run: xcode-select --install"
-    exit 1
+    warn "  Xcode Command Line Tools not found. Installing..."
+    xcode-select --install
+    echo "  Waiting for Xcode CLT installation to complete..."
+    echo "  Click 'Install' in the dialog that appeared, then wait."
+    until xcode-select -p > /dev/null 2>&1; do
+        sleep 5
+    done
+    success "  Xcode Command Line Tools installed"
 fi
 
 # python3
