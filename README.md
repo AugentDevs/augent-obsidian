@@ -71,7 +71,6 @@ Claude Code and Codex can already edit files inside your Obsidian vault. The bot
 
 - macOS (Apple Silicon or Intel)
 - [Obsidian](https://obsidian.md) installed with at least one vault
-- Xcode Command Line Tools: `xcode-select --install`
 
 ## Setup
 
