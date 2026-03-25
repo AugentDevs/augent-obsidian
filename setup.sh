@@ -333,13 +333,43 @@ else
     warn "  [--] .md handler: $MD_HANDLER (may need logout/login)"
 fi
 
-# Add File Watcher to login items
-osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Obsidian File Watcher.app", hidden:true}' 2>/dev/null || true
-success "  [ok] File Watcher added to login items"
+# Remove old login item approach (unreliable)
+osascript -e 'tell application "System Events" to delete login item "Obsidian File Watcher"' 2>/dev/null || true
 
-# Launch the watcher
-open -a "Obsidian File Watcher" 2>/dev/null || true
-success "  [ok] File Watcher launched"
+# Install launchd agent (auto-starts on login, auto-restarts on crash)
+PLIST_DIR="$HOME/Library/LaunchAgents"
+PLIST_PATH="$PLIST_DIR/com.local.obsidian-file-watcher.plist"
+mkdir -p "$PLIST_DIR"
+
+cat > "$PLIST_PATH" << LAUNCHD_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.local.obsidian-file-watcher</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/Obsidian File Watcher.app/Contents/MacOS/obsidian-file-watcher</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/obsidian-file-watcher.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/obsidian-file-watcher.log</string>
+</dict>
+</plist>
+LAUNCHD_EOF
+
+# Stop any running instance, then load the agent
+launchctl unload "$PLIST_PATH" 2>/dev/null || true
+pkill -f "obsidian-file-watcher" 2>/dev/null || true
+sleep 1
+launchctl load "$PLIST_PATH"
+success "  [ok] File Watcher installed as LaunchAgent (auto-starts, auto-restarts)"
 
 # --- Summary ---
 echo ""

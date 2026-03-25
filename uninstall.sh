@@ -49,6 +49,12 @@ echo ""
 # ---------------------------------------------------------------------------
 echo -e "${BOLD}[1/3] Stopping file watcher...${NC}"
 
+# Stop via launchd (v2.0+)
+PLIST_PATH="$HOME/Library/LaunchAgents/com.local.obsidian-file-watcher.plist"
+launchctl unload "$PLIST_PATH" 2>/dev/null || true
+rm -f "$PLIST_PATH"
+
+# Also clean up legacy login item (v1.x)
 pkill -f "obsidian-file-watcher" 2>/dev/null || true
 osascript -e 'tell application "System Events" to delete login item "Obsidian File Watcher"' 2>/dev/null || true
 
