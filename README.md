@@ -25,18 +25,17 @@
 
 ## The Problem
 
-macOS opens `.txt` files in TextEdit and `.md` files in Xcode by default. If you use Obsidian as your main editor, you have to right-click and "Open With" every time. External files (outside your vault) don't show up in Obsidian at all.
+Claude Code and Codex can already edit files inside your Obsidian vault. The bottleneck is macOS: it prevents you from setting Obsidian as the default opener for `.txt` and `.md` files.
 
-If you use Claude Code to edit notes inside your vault, those edits land on disk and Obsidian picks them up automatically. No special sync layer needed.
+**The problems:**
+- **macOS prevents setting Obsidian as the default opener** for `.txt` and `.md` files
+- **Files outside your vault** don't show up in Obsidian at all
+- **External edits** from Claude or Codex can go stale without a background watcher
 
-## What It Does
-
-Two lightweight macOS apps that run silently in the background:
-
-- **Every `.txt` and `.md` file opens in Obsidian by default.** Double-click any text or markdown file on your Mac and it opens in your vault.
-- **External files are linked automatically.** Files outside your vault get hard-linked into an `External Files/` folder so Obsidian can index and display them.
-- **Links survive atomic writes.** A background watcher re-creates hard links when external editors break them.
-- **No dock icon, near-instant.** Both apps run as background processes.
+**What this setup fixes:**
+- **Every `.txt` and `.md`** on your Mac opens directly in Obsidian
+- **External files** are hard-linked into your vault automatically
+- **A background service** keeps everything in sync and auto-restarts if it stops
 
 ## Security and Privacy
 
