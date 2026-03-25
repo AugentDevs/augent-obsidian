@@ -4,26 +4,67 @@ set -eo pipefail
 # =============================================================================
 # augent-obsidian setup
 # Make every .txt and .md file on your Mac open directly in Obsidian.
+# curl -fsSL https://augent.app/obsidian.sh | bash
 # =============================================================================
 
 VERSION="2.0.0"
 GITHUB_RAW="https://raw.githubusercontent.com/AugentDevs/augent-obsidian/main"
 
-# --- Colors ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BOLD='\033[1m'
-NC='\033[0m' # No Color
+# --- Colors & Formatting ---
+setup_colors() {
+    if [[ -t 1 ]] || [[ -r /dev/tty ]]; then
+        RED='\033[0;31m'
+        GREEN='\033[0;32m'
+        YELLOW='\033[1;33m'
+        BLUE='\033[0;96m'
+        BOLD='\033[1m'
+        DIM='\033[2m'
+        NC='\033[0m'
+    else
+        RED='' GREEN='' YELLOW='' BLUE='' BOLD='' DIM='' NC=''
+    fi
+}
+setup_colors
 
-# --- Helpers ---
-info()    { echo -e "${BOLD}$1${NC}"; }
-success() { echo -e "${GREEN}$1${NC}"; }
-warn()    { echo -e "${YELLOW}$1${NC}"; }
-error()   { echo -e "${RED}$1${NC}"; }
-phase()   { echo ""; info "[$1] $2"; echo "---"; }
+# --- Logging ---
+log_success() { sleep 0.06; echo -e "  ${GREEN}✓${NC} $*"; }
+log_warn()    { echo -e "  ${YELLOW}⚠${NC} $*"; }
+log_error()   { echo -e "  ${RED}✗${NC} $*" >&2; }
+log_phase()   { sleep 0.3; echo -e "\n\033[38;2;0;240;96m${BOLD}[$1/$2]${NC} ${BOLD}$3${NC}\n"; sleep 0.15; }
 
+# --- Spinner ---
+SPINNER_PID=""
+start_spinner() {
+    local msg=$1
+    if [[ -r /dev/tty && -w /dev/tty ]]; then
+        (
+            local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+            local i=0
+            while true; do
+                printf "\r  ${BLUE}%s${NC} %s" "${frames[$i]}" "$msg" > /dev/tty
+                i=$(( (i + 1) % 10 ))
+                sleep 0.08
+            done
+        ) </dev/null > /dev/null 2>&1 &
+        SPINNER_PID=$!
+        disown "$SPINNER_PID" 2>/dev/null || true
+    else
+        echo -e "  ${BLUE}::${NC} $msg"
+    fi
+}
+
+stop_spinner() {
+    if [[ -n "$SPINNER_PID" ]]; then
+        kill "$SPINNER_PID" 2>/dev/null || true
+        sleep 0.15
+        printf "\r\033[K" > /dev/tty 2>/dev/null || true
+        SPINNER_PID=""
+    fi
+}
+
+# --- Cleanup ---
 cleanup() {
+    stop_spinner
     if [[ -n "${BUILD_DIR:-}" && -d "$BUILD_DIR" ]]; then
         rm -rf "$BUILD_DIR"
     fi
@@ -33,61 +74,62 @@ cleanup() {
 }
 trap cleanup EXIT
 
+TOTAL_PHASES=6
+
 # =============================================================================
 # Phase 1: Detect environment
 # =============================================================================
-phase "1/6" "Detect environment"
+log_phase 1 $TOTAL_PHASES "Detect environment"
 
-echo ""
-echo -e "${BOLD}  augent-obsidian setup${NC}  v${VERSION}"
-echo -e "  $(date +%Y-%m-%d)"
+echo -e "  ${BOLD}augent-obsidian${NC} v${VERSION}"
+echo -e "  ${DIM}$(date +%Y-%m-%d)${NC}"
 echo ""
 
 # Username
-USERNAME="$USER"
-success "  User: $USERNAME"
+log_success "User: $USER"
 
 # Obsidian installed?
 if ls /Applications/Obsidian.app > /dev/null 2>&1; then
-    success "  Obsidian.app found"
+    log_success "Obsidian.app found"
 else
-    error "  Obsidian.app not found in /Applications"
-    error "  Install Obsidian from https://obsidian.md before running this script."
+    log_error "Obsidian.app not found in /Applications"
+    log_error "Install Obsidian from https://obsidian.md before running this script."
     exit 1
 fi
 
 # Auto-detect vaults
-echo "  Searching for Obsidian vaults..."
+start_spinner "Searching for Obsidian vaults"
 VAULT_DIRS=()
 while IFS= read -r line; do
     VAULT_DIRS+=("$(dirname "$line")")
 done < <(find ~/Desktop ~/Documents ~/ -maxdepth 3 -name ".obsidian" -type d 2>/dev/null | head -10)
+stop_spinner
 
 if [[ ${#VAULT_DIRS[@]} -eq 0 ]]; then
-    warn "  No vaults found automatically."
+    log_warn "No vaults found automatically."
     echo -n "  Enter your vault path: "
-    read -r VAULT_PATH
+    read -r VAULT_PATH < /dev/tty
     if [[ ! -d "$VAULT_PATH/.obsidian" ]]; then
-        error "  $VAULT_PATH does not appear to be an Obsidian vault (no .obsidian directory)."
+        log_error "$VAULT_PATH does not appear to be an Obsidian vault (no .obsidian directory)."
         exit 1
     fi
 elif [[ ${#VAULT_DIRS[@]} -eq 1 ]]; then
     VAULT_PATH="${VAULT_DIRS[0]}"
-    success "  Found vault: $VAULT_PATH"
+    log_success "Found vault: $VAULT_PATH"
 else
     echo "  Found multiple vaults:"
     for i in "${!VAULT_DIRS[@]}"; do
         echo "    $((i+1))) ${VAULT_DIRS[$i]}"
     done
     echo -n "  Select vault [1-${#VAULT_DIRS[@]}]: "
-    read -r choice
+    read -r choice < /dev/tty
     if [[ "$choice" -ge 1 && "$choice" -le ${#VAULT_DIRS[@]} ]] 2>/dev/null; then
         VAULT_PATH="${VAULT_DIRS[$((choice-1))]}"
     else
-        error "  Invalid selection."
+        log_error "Invalid selection."
         exit 1
     fi
-    success "  Using vault: $VAULT_PATH"
+    log_success "Using vault: $VAULT_PATH"
 fi
 
 # Strip trailing slash
@@ -95,30 +137,29 @@ VAULT_PATH="${VAULT_PATH%/}"
 
 # Xcode CLT
 if xcode-select -p > /dev/null 2>&1; then
-    success "  Xcode Command Line Tools installed"
+    log_success "Xcode Command Line Tools installed"
 else
-    warn "  Xcode Command Line Tools not found. Installing..."
+    log_warn "Xcode Command Line Tools not found. Installing..."
     xcode-select --install
-    echo "  Waiting for Xcode CLT installation to complete..."
     echo "  Click 'Install' in the dialog that appeared, then wait."
     until xcode-select -p > /dev/null 2>&1; do
         sleep 5
     done
-    success "  Xcode Command Line Tools installed"
+    log_success "Xcode Command Line Tools installed"
 fi
 
 # python3
 if command -v python3 > /dev/null 2>&1; then
-    success "  python3 found: $(python3 --version 2>&1)"
+    log_success "python3 found: $(python3 --version 2>&1)"
 else
-    error "  python3 not found. Install Python 3 before running this script."
+    log_error "python3 not found. Install Python 3 before running this script."
     exit 1
 fi
 
 # =============================================================================
 # Phase 2: Verify Obsidian plugins
 # =============================================================================
-phase "2/6" "Verify Obsidian plugins"
+log_phase 2 $TOTAL_PHASES "Verify Obsidian plugins"
 
 OBSIDIAN_DIR="$VAULT_PATH/.obsidian"
 PLUGINS_OK=true
@@ -133,10 +174,10 @@ if 'obsidian-custom-file-extensions-plugin' not in plugins:
     print('Missing: Custom File Extensions')
     sys.exit(1)
 " 2>/dev/null; then
-        success "  Custom File Extensions plugin installed"
+        log_success "Custom File Extensions plugin installed"
     else
         PLUGINS_OK=false
-        error "  Missing required plugin: Custom File Extensions by MeepTech"
+        log_error "Missing required plugin: Custom File Extensions by MeepTech"
         echo "  Install it in Obsidian: Settings > Community plugins > Browse"
     fi
 
@@ -147,15 +188,14 @@ plugins = json.load(open('$COMMUNITY_PLUGINS'))
 if 'obsidian-local-rest-api' not in plugins:
     sys.exit(1)
 " 2>/dev/null; then
-        success "  Local REST API plugin installed (recommended)"
+        log_success "Local REST API plugin installed (recommended)"
     else
-        warn "  Local REST API not installed (optional, recommended for power users)"
-        echo "  Adds REST endpoints for searching, reading, and automating your vault."
-        echo "  Install: obsidian://show-plugin?id=obsidian-local-rest-api"
+        log_warn "Local REST API not installed (optional, recommended for power users)"
+        echo "    Adds REST endpoints for searching, reading, and automating your vault."
     fi
 else
     PLUGINS_OK=false
-    error "  community-plugins.json not found."
+    log_error "community-plugins.json not found."
     echo "  Enable community plugins in Obsidian and install:"
     echo "    - Custom File Extensions Plugin (required)"
 fi
@@ -169,48 +209,49 @@ cfg = json.load(open('$APP_JSON'))
 if not cfg.get('showUnsupportedFiles', False):
     sys.exit(1)
 " 2>/dev/null; then
-        success "  Detect all file extensions enabled"
+        log_success "Detect all file extensions enabled"
     else
         PLUGINS_OK=false
-        error "  'Detect all file extensions' is not enabled."
+        log_error "'Detect all file extensions' is not enabled."
         echo "  Go to Obsidian Settings > Files & Links > Detect all file extensions"
     fi
 else
     PLUGINS_OK=false
-    error "  app.json not found. Open Obsidian at least once, then enable 'Detect all file extensions'."
+    log_error "app.json not found. Open Obsidian at least once, then enable 'Detect all file extensions'."
 fi
 
 if [[ "$PLUGINS_OK" != "true" ]]; then
     echo ""
-    error "Fix the issues above and re-run this script."
+    log_error "Fix the issues above and re-run this script."
     exit 1
 fi
 
 # =============================================================================
 # Phase 3: Install prerequisites
 # =============================================================================
-phase "3/6" "Install prerequisites"
+log_phase 3 $TOTAL_PHASES "Install prerequisites"
 
 if command -v brew > /dev/null 2>&1; then
-    success "  Homebrew found"
+    log_success "Homebrew found"
 else
-    error "  Homebrew not found."
+    log_error "Homebrew not found."
     echo "  Install it: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
     exit 1
 fi
 
 if command -v duti > /dev/null 2>&1; then
-    success "  duti found"
+    log_success "duti found"
 else
-    warn "  duti not found, installing..."
-    brew install duti
-    success "  duti installed"
+    start_spinner "Installing duti"
+    brew install duti > /dev/null 2>&1
+    stop_spinner
+    log_success "duti installed"
 fi
 
 # =============================================================================
 # Phase 4: Build apps
 # =============================================================================
-phase "4/6" "Build apps"
+log_phase 4 $TOTAL_PHASES "Build apps"
 
 BUILD_DIR=$(mktemp -d)
 
@@ -219,9 +260,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -f "$SCRIPT_DIR/src/OpenInObsidian.swift" ]]; then
     SRC_DIR="$SCRIPT_DIR/src"
-    success "  Using local source files"
+    log_success "Using local source files"
 else
-    warn "  Local source not found, downloading from GitHub..."
+    start_spinner "Downloading source from GitHub"
     DOWNLOAD_DIR=$(mktemp -d)
     SRC_DIR="$DOWNLOAD_DIR/src"
     mkdir -p "$SRC_DIR"
@@ -235,39 +276,44 @@ else
 
     for f in "${FILES[@]}"; do
         dest="$DOWNLOAD_DIR/$f"
-        echo "  Downloading $f..."
         if ! curl -sfL "$GITHUB_RAW/$f" -o "$dest"; then
-            error "  Failed to download $f from GitHub."
+            stop_spinner
+            log_error "Failed to download $f from GitHub."
             exit 1
         fi
     done
-    success "  All source files downloaded"
+    stop_spinner
+    log_success "All source files downloaded"
 fi
 
 # Build OpenInObsidian
-echo "  Compiling Open in Obsidian..."
+start_spinner "Compiling Open in Obsidian"
 sed "s|VAULT_PATH_HERE|$VAULT_PATH|g" "$SRC_DIR/OpenInObsidian.swift" > "$BUILD_DIR/OpenInObsidian.swift"
-if ! swiftc -O -o "$BUILD_DIR/open-in-obsidian" "$BUILD_DIR/OpenInObsidian.swift" -framework Cocoa 2>&1; then
-    error "  swiftc failed for OpenInObsidian.swift"
+if ! swiftc -O -o "$BUILD_DIR/open-in-obsidian" "$BUILD_DIR/OpenInObsidian.swift" -framework Cocoa > /dev/null 2>&1; then
+    stop_spinner
+    log_error "swiftc failed for OpenInObsidian.swift"
     echo "  Try: sudo xcode-select --reset"
     exit 1
 fi
-success "  open-in-obsidian compiled"
+stop_spinner
+log_success "Open in Obsidian compiled"
 
 # Build ObsidianFileWatcher
-echo "  Compiling Obsidian File Watcher..."
+start_spinner "Compiling Obsidian File Watcher"
 sed "s|VAULT_PATH_HERE|$VAULT_PATH|g" "$SRC_DIR/ObsidianFileWatcher.swift" > "$BUILD_DIR/ObsidianFileWatcher.swift"
-if ! swiftc -O -o "$BUILD_DIR/obsidian-file-watcher" "$BUILD_DIR/ObsidianFileWatcher.swift" -framework Cocoa 2>&1; then
-    error "  swiftc failed for ObsidianFileWatcher.swift"
+if ! swiftc -O -o "$BUILD_DIR/obsidian-file-watcher" "$BUILD_DIR/ObsidianFileWatcher.swift" -framework Cocoa > /dev/null 2>&1; then
+    stop_spinner
+    log_error "swiftc failed for ObsidianFileWatcher.swift"
     echo "  Try: sudo xcode-select --reset"
     exit 1
 fi
-success "  obsidian-file-watcher compiled"
+stop_spinner
+log_success "Obsidian File Watcher compiled"
 
 # =============================================================================
 # Phase 5: Install apps and register file handlers
 # =============================================================================
-phase "5/6" "Install apps and register file handlers"
+log_phase 5 $TOTAL_PHASES "Install apps and register file handlers"
 
 # --- Open in Obsidian ---
 HANDLER_APP="/Applications/Open in Obsidian.app"
@@ -275,9 +321,9 @@ rm -rf "$HANDLER_APP"
 mkdir -p "$HANDLER_APP/Contents/MacOS"
 cp "$BUILD_DIR/open-in-obsidian" "$HANDLER_APP/Contents/MacOS/open-in-obsidian"
 cp "$SRC_DIR/open-in-obsidian.plist" "$HANDLER_APP/Contents/Info.plist"
-codesign --force --deep --sign - "$HANDLER_APP"
+codesign --force --deep --sign - "$HANDLER_APP" > /dev/null 2>&1
 xattr -cr "$HANDLER_APP"
-success "  Open in Obsidian.app installed"
+log_success "Open in Obsidian.app installed"
 
 # Register with Launch Services
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister "$HANDLER_APP"
@@ -288,9 +334,9 @@ rm -rf "$WATCHER_APP"
 mkdir -p "$WATCHER_APP/Contents/MacOS"
 cp "$BUILD_DIR/obsidian-file-watcher" "$WATCHER_APP/Contents/MacOS/obsidian-file-watcher"
 cp "$SRC_DIR/file-watcher.plist" "$WATCHER_APP/Contents/Info.plist"
-codesign --force --deep --sign - "$WATCHER_APP"
+codesign --force --deep --sign - "$WATCHER_APP" > /dev/null 2>&1
 xattr -cr "$WATCHER_APP"
-success "  Obsidian File Watcher.app installed"
+log_success "Obsidian File Watcher.app installed"
 
 # --- Register file handlers ---
 BUNDLE_ID="com.local.open-in-obsidian"
@@ -299,43 +345,43 @@ duti -s "$BUNDLE_ID" .txt all
 duti -s "$BUNDLE_ID" com.apple.traditional-mac-plain-text all
 duti -s "$BUNDLE_ID" net.daringfireball.markdown all
 duti -s "$BUNDLE_ID" .md all
-success "  File handlers registered for .txt and .md"
+log_success "File handlers registered for .txt and .md"
 
 # =============================================================================
 # Phase 6: Verify installation
 # =============================================================================
-phase "6/6" "Verify installation"
+log_phase 6 $TOTAL_PHASES "Verify installation"
 
 ERRORS=0
 
 # Check apps exist
 if [[ -d "/Applications/Open in Obsidian.app" ]]; then
-    success "  [ok] Open in Obsidian.app"
+    log_success "Open in Obsidian.app"
 else
-    error "  [!!] Open in Obsidian.app missing"
+    log_error "Open in Obsidian.app missing"
     ERRORS=$((ERRORS+1))
 fi
 
 if [[ -d "/Applications/Obsidian File Watcher.app" ]]; then
-    success "  [ok] Obsidian File Watcher.app"
+    log_success "Obsidian File Watcher.app"
 else
-    error "  [!!] Obsidian File Watcher.app missing"
+    log_error "Obsidian File Watcher.app missing"
     ERRORS=$((ERRORS+1))
 fi
 
 # Check duti registrations
 TXT_HANDLER=$(duti -x txt 2>/dev/null | head -1)
 if [[ "$TXT_HANDLER" == *"Open in Obsidian"* ]]; then
-    success "  [ok] .txt handler: $TXT_HANDLER"
+    log_success ".txt handler: $TXT_HANDLER"
 else
-    warn "  [--] .txt handler: $TXT_HANDLER (may need logout/login)"
+    log_warn ".txt handler: $TXT_HANDLER (may need logout/login)"
 fi
 
 MD_HANDLER=$(duti -x md 2>/dev/null | head -1)
 if [[ "$MD_HANDLER" == *"Open in Obsidian"* ]]; then
-    success "  [ok] .md handler: $MD_HANDLER"
+    log_success ".md handler: $MD_HANDLER"
 else
-    warn "  [--] .md handler: $MD_HANDLER (may need logout/login)"
+    log_warn ".md handler: $MD_HANDLER (may need logout/login)"
 fi
 
 # Remove old login item approach (unreliable)
@@ -374,26 +420,26 @@ launchctl unload "$PLIST_PATH" 2>/dev/null || true
 pkill -f "obsidian-file-watcher" 2>/dev/null || true
 sleep 1
 launchctl load "$PLIST_PATH"
-success "  [ok] File Watcher installed as LaunchAgent (auto-starts, auto-restarts)"
+log_success "File Watcher installed as LaunchAgent (auto-starts, auto-restarts)"
 
 # --- Summary ---
 echo ""
-echo "==========================================="
+echo -e "  ${GREEN}${BOLD}==========================================${NC}"
 if [[ $ERRORS -eq 0 ]]; then
-    success "  augent-obsidian installed successfully!"
+    echo -e "  ${GREEN}${BOLD}  augent-obsidian installed successfully!${NC}"
 else
-    warn "  Installation completed with $ERRORS error(s)."
+    echo -e "  ${YELLOW}${BOLD}  Installed with $ERRORS error(s).${NC}"
 fi
-echo "==========================================="
+echo -e "  ${GREEN}${BOLD}==========================================${NC}"
 echo ""
-echo "  Vault:   $VAULT_PATH"
-echo "  Apps:    /Applications/Open in Obsidian.app"
-echo "           /Applications/Obsidian File Watcher.app"
+echo -e "  ${DIM}Vault:${NC}   $VAULT_PATH"
+echo -e "  ${DIM}Apps:${NC}    /Applications/Open in Obsidian.app"
+echo -e "           /Applications/Obsidian File Watcher.app"
 echo ""
-warn "  Grant Full Disk Access to both apps if prompted:"
-warn "  System Settings > Privacy & Security > Full Disk Access"
-warn "  Add: Open in Obsidian.app and Obsidian File Watcher.app"
+log_warn "Grant Full Disk Access to both apps if prompted:"
+echo -e "    System Settings > Privacy & Security > Full Disk Access"
+echo -e "    Add: Open in Obsidian.app and Obsidian File Watcher.app"
 echo ""
 if [[ $ERRORS -eq 0 ]]; then
-    success "  Done. Double-click any .txt or .md file to open it in Obsidian."
+    log_success "Done. Double-click any .txt or .md file to open it in Obsidian."
 fi
