@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/AugentDevs/augent-obsidian/actions/workflows/ci.yml"><img src="https://github.com/AugentDevs/augent-obsidian/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/AugentDevs/augent-obsidian/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/AugentDevs/augent-obsidian/ci.yml?style=for-the-badge&label=CI" alt="CI"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/macOS_13+-lightgrey.svg?style=for-the-badge" alt="macOS 13+">
   <img src="https://img.shields.io/badge/telemetry-none-green.svg?style=for-the-badge" alt="No Telemetry">
