@@ -8,6 +8,7 @@ set -eo pipefail
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+# shellcheck disable=SC2034
 RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color

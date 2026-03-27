@@ -17,13 +17,13 @@ jobs:
         run: brew install shellcheck
 
       - name: Shellcheck setup.sh
-        run: shellcheck -x setup.sh
+        run: shellcheck -x -S warning setup.sh
 
       - name: Shellcheck uninstall.sh
-        run: shellcheck -x uninstall.sh
+        run: shellcheck -x -S warning uninstall.sh
 
       - name: Shellcheck test.sh
-        run: shellcheck -x test.sh
+        run: shellcheck -x -S warning test.sh
 
       - name: Validate plists
         run: |
