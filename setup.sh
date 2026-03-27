@@ -76,6 +76,12 @@ trap cleanup EXIT
 
 TOTAL_PHASES=6
 
+# Detect existing installation
+IS_UPDATE=false
+if [[ -d "/Applications/Open in Obsidian.app" && -d "/Applications/Obsidian File Watcher.app" ]]; then
+    IS_UPDATE=true
+fi
+
 # =============================================================================
 # Phase 1: Detect environment
 # =============================================================================
@@ -84,6 +90,10 @@ log_phase 1 $TOTAL_PHASES "Detect environment"
 echo -e "  ${BOLD}augent-obsidian${NC} v${VERSION}"
 echo -e "  ${DIM}$(date +%Y-%m-%d)${NC}"
 echo ""
+
+if $IS_UPDATE; then
+    log_success "Existing installation detected, updating"
+fi
 
 # Username
 log_success "User: $USER"
@@ -426,7 +436,11 @@ log_success "File Watcher installed as LaunchAgent (auto-starts, auto-restarts)"
 echo ""
 echo -e "  ${GREEN}${BOLD}==========================================${NC}"
 if [[ $ERRORS -eq 0 ]]; then
-    echo -e "  ${GREEN}${BOLD}  augent-obsidian installed successfully!${NC}"
+    if $IS_UPDATE; then
+        echo -e "  ${GREEN}${BOLD}  augent-obsidian updated to v${VERSION}!${NC}"
+    else
+        echo -e "  ${GREEN}${BOLD}  augent-obsidian installed successfully!${NC}"
+    fi
 else
     echo -e "  ${YELLOW}${BOLD}  Installed with $ERRORS error(s).${NC}"
 fi
@@ -441,5 +455,9 @@ echo -e "    System Settings > Privacy & Security > Full Disk Access"
 echo -e "    Add: Open in Obsidian.app and Obsidian File Watcher.app"
 echo ""
 if [[ $ERRORS -eq 0 ]]; then
-    log_success "Done. Double-click any .txt or .md file to open it in Obsidian."
+    if $IS_UPDATE; then
+        log_success "Done. Updated to v${VERSION}."
+    else
+        log_success "Done. Double-click any .txt or .md file to open it in Obsidian."
+    fi
 fi
