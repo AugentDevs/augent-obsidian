@@ -115,6 +115,7 @@ The script detects your vault, verifies the required plugin, compiles two native
 | `.txt` files show raw text | Enable Custom File Extensions plugin in Obsidian. |
 | External files missing from vault | Check watcher is running: `ps aux \| grep obsidian-file-watcher` |
 | Claude edits don't appear | Same as above. Re-run `bash setup.sh` to reinstall the LaunchAgent. |
+| Repeated "Error editing file" across panes | Two Claude Code panes editing the same file. Pane 2's context goes stale after Pane 1 edits. Tell Claude to re-read the file before editing. |
 
 ## Uninstall
 

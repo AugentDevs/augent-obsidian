@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.augent.app/guides/obsidian-setup
+    about: Check the Obsidian setup guide before opening an issue.
+  - name: Discord
+    url: https://discord.com/invite/DNmaZtaE7b
+    about: Get help from the community on Discord.
